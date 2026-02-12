@@ -2,6 +2,8 @@
 
 OpenTelemetry metrics extension for [pi-coding-agent](https://github.com/badlogic/pi-mono). Track sessions, turns, tool usage, token consumption, costs, and performance timing.
 
+![pi-otlp dashboard overview](./demo/screenshots/dashboard-full.png)
+
 ## Installation
 
 ```bash
@@ -122,12 +124,6 @@ docker run -d --name otel-collector \
 ### Full Stack Demo
 
 See [`demo/`](./demo) for a complete Docker Compose setup with OTLP Collector, Prometheus, and pre-configured Grafana dashboards.
-
-## Demo Screenshots
-
-### Dashboard overview
-
-![pi-otlp dashboard overview](./demo/screenshots/dashboard-full.png)
 
 ## License
 
