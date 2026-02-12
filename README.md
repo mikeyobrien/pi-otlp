@@ -123,6 +123,20 @@ docker run -d --name otel-collector \
 
 See [`demo/`](./demo) for a complete Docker Compose setup with OTLP Collector, Prometheus, and pre-configured Grafana dashboards.
 
+## Demo Screenshots
+
+### Dashboard overview
+
+![pi-otlp dashboard overview](./demo/screenshots/dashboard-full.png)
+
+### Tokens and cost panels
+
+![pi-otlp tokens and costs](./demo/screenshots/dashboard-tokens.png)
+
+### 15-minute activity view
+
+![pi-otlp 15 minute dashboard](./demo/screenshots/dashboard-15m.png)
+
 ## License
 
 MIT

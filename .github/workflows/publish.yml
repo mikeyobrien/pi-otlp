@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
 
       - name: Ensure npm 11.5.1+ for OIDC
         run: npm install -g npm@latest
@@ -37,10 +37,20 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
-      - name: Publish with provenance
+      - name: Publish with provenance (trusted publishing)
         if: ${{ github.event.inputs.dry_run != 'true' }}
-        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken || true
+          npm config delete always-auth || true
+          npm publish --provenance --access public
 
       - name: Dry run publish
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: npm publish --access public --dry-run
+        env:
+          NODE_AUTH_TOKEN: ''
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken || true
+          npm config delete always-auth || true
+          npm publish --access public --dry-run
