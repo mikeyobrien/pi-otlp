@@ -2,7 +2,7 @@
 
 OpenTelemetry metrics extension for [pi-coding-agent](https://github.com/badlogic/pi-mono). Track sessions, turns, tool usage, token consumption, costs, and performance timing.
 
-![pi-otlp dashboard overview](./demo/screenshots/dashboard-full.png)
+<img width="1055" height="856" alt="Screenshot 2026-02-12 at 4 14 58 PM" src="https://github.com/user-attachments/assets/a6a377de-f659-4b8c-8f40-8c9038eb92a6" />
 
 ## Installation
 
