@@ -1,0 +1,47 @@
+{
+  "name": "@mobrienv/pi-otlp",
+  "version": "0.1.0",
+  "description": "OpenTelemetry metrics and events extension for pi-coding-agent",
+  "license": "MIT",
+  "author": "mobrienv",
+  "keywords": [
+    "pi-package",
+    "opentelemetry",
+    "otlp",
+    "metrics",
+    "observability"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mobrienv/pi-otlp.git"
+  },
+  "bugs": "https://github.com/mobrienv/pi-otlp/issues",
+  "homepage": "https://github.com/mobrienv/pi-otlp",
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "src/index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": ">=0.42.0"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.57.0",
+    "@opentelemetry/resources": "^1.30.0",
+    "@opentelemetry/sdk-metrics": "^1.30.0",
+    "@opentelemetry/semantic-conventions": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@vitest/runner": "^4.0.18",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  }
+}

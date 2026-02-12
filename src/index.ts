@@ -1,0 +1,147 @@
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { metrics, DiagConsoleLogger, DiagLogLevel, diag } from "@opentelemetry/api";
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+  ConsoleMetricExporter,
+} from "@opentelemetry/sdk-metrics";
+import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { Resource } from "@opentelemetry/resources";
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
+import { createTelemetryCollector, type TelemetryCollector } from "./telemetry.js";
+import { getConfig } from "./config.js";
+
+const SERVICE_NAME = "pi-coding-agent";
+const VERSION = "0.1.0";
+
+let collector: TelemetryCollector | null = null;
+let meterProvider: MeterProvider | null = null;
+
+export default function (pi: ExtensionAPI) {
+  const config = getConfig();
+
+  if (!config.enabled) {
+    return;
+  }
+
+  if (config.debug) {
+    diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+  }
+
+  const resource = new Resource({
+    [ATTR_SERVICE_NAME]: SERVICE_NAME,
+    [ATTR_SERVICE_VERSION]: VERSION,
+    "os.type": process.platform,
+    "host.arch": process.arch,
+  });
+
+  const readers = [];
+
+  if (config.exporters.includes("console")) {
+    readers.push(
+      new PeriodicExportingMetricReader({
+        exporter: new ConsoleMetricExporter(),
+        exportIntervalMillis: config.exportIntervalMs,
+      })
+    );
+  }
+
+  if (config.exporters.includes("otlp")) {
+    const otlpExporter = new OTLPMetricExporter({
+      url: config.otlpEndpoint,
+      headers: config.otlpHeaders,
+    });
+    readers.push(
+      new PeriodicExportingMetricReader({
+        exporter: otlpExporter,
+        exportIntervalMillis: config.exportIntervalMs,
+      })
+    );
+  }
+
+  if (readers.length === 0) {
+    return;
+  }
+
+  meterProvider = new MeterProvider({
+    resource,
+    readers,
+  });
+
+  metrics.setGlobalMeterProvider(meterProvider);
+
+  const meter = meterProvider.getMeter("com.pi.otlp");
+  collector = createTelemetryCollector(meter);
+
+  // Session lifecycle events
+  pi.on("session_start", async (_event, ctx) => {
+    collector?.recordSessionStart({
+      sessionId: ctx.sessionManager?.getSessionId() ?? "unknown",
+    });
+  });
+
+  pi.on("session_shutdown", async () => {
+    collector?.recordSessionEnd();
+    await shutdown();
+  });
+
+  // Turn events for tracking agent activity
+  pi.on("turn_start", async () => {
+    collector?.recordTurnStart();
+  });
+
+  pi.on("turn_end", async () => {
+    collector?.recordTurnEnd();
+  });
+
+  // Tool events
+  pi.on("tool_call", async (event) => {
+    collector?.recordToolCall({
+      toolName: event.toolName,
+    });
+  });
+
+  pi.on("tool_result", async (event) => {
+    collector?.recordToolResult({
+      toolName: event.toolName,
+      success: !event.isError,
+    });
+  });
+
+  // User input event
+  pi.on("input", async (event) => {
+    if (event.text) {
+      collector?.recordUserPrompt({
+        promptLength: event.text.length,
+      });
+    }
+  });
+
+  // Register /otlp-status command
+  pi.registerCommand("otlp-status", {
+    description: "Show OTLP telemetry status",
+    async handler(_args, ctx) {
+      const status = collector?.getStatus() ?? { sessions: 0, turns: 0, tools: 0, prompts: 0 };
+      await ctx.ui.notify(
+        `OTLP Telemetry Status:\n` +
+          `  Sessions: ${status.sessions}\n` +
+          `  Turns: ${status.turns}\n` +
+          `  Tool calls: ${status.tools}\n` +
+          `  Prompts: ${status.prompts}\n` +
+          `  Exporters: ${config.exporters.join(", ")}\n` +
+          `  Endpoint: ${config.otlpEndpoint}`
+      );
+    },
+  });
+}
+
+async function shutdown(): Promise<void> {
+  if (meterProvider) {
+    await meterProvider.shutdown();
+    meterProvider = null;
+    collector = null;
+  }
+}
