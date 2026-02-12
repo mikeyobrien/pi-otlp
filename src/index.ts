@@ -19,6 +19,8 @@ const VERSION = "0.1.0";
 
 let collector: TelemetryCollector | null = null;
 let meterProvider: MeterProvider | null = null;
+let currentProvider: string = "unknown";
+let currentModel: string = "unknown";
 
 export default function (pi: ExtensionAPI) {
   const config = getConfig();
@@ -78,8 +80,16 @@ export default function (pi: ExtensionAPI) {
 
   // Session lifecycle events
   pi.on("session_start", async (_event, ctx) => {
+    // Capture initial provider/model
+    const model = ctx.model;
+    if (model) {
+      currentProvider = model.provider as string;
+      currentModel = model.id;
+    }
     collector?.recordSessionStart({
       sessionId: ctx.sessionManager?.getSessionId() ?? "unknown",
+      provider: currentProvider,
+      model: currentModel,
     });
   });
 
@@ -119,11 +129,22 @@ export default function (pi: ExtensionAPI) {
   });
 
   // User input event
-  pi.on("input", async (event) => {
+  pi.on("input", async (event, ctx) => {
     if (event.text) {
       collector?.recordUserPrompt({
         promptLength: event.text.length,
       });
+    }
+    // Update provider/model from current model context
+    const model = ctx.model;
+    if (model) {
+      const provider = model.provider as string;
+      const modelId = model.id;
+      if (provider !== currentProvider || modelId !== currentModel) {
+        currentProvider = provider;
+        currentModel = modelId;
+        collector?.setProviderModel(provider, modelId);
+      }
     }
   });
 

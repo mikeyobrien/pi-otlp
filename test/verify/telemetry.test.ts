@@ -47,6 +47,13 @@ describe("TelemetryCollector", () => {
   let counters: Map<string, Counter>;
   let histograms: Map<string, MockHistogram>;
 
+  // Base attributes included in all metrics
+  const baseAttrs = (sessionId: string, provider = "unknown", model = "unknown") => ({
+    "session.id": sessionId,
+    "provider": provider,
+    "model": model,
+  });
+
   beforeEach(() => {
     const mock = createMockMeter();
     collector = createTelemetryCollector(mock.meter);
@@ -59,7 +66,14 @@ describe("TelemetryCollector", () => {
       collector.recordSessionStart({ sessionId: "sess-123" });
 
       const counter = counters.get("pi.session.count");
-      expect(counter?.add).toHaveBeenCalledWith(1, { "session.id": "sess-123" });
+      expect(counter?.add).toHaveBeenCalledWith(1, baseAttrs("sess-123"));
+    });
+
+    it("includes provider and model when specified", () => {
+      collector.recordSessionStart({ sessionId: "sess-123", provider: "anthropic", model: "claude-3" });
+
+      const counter = counters.get("pi.session.count");
+      expect(counter?.add).toHaveBeenCalledWith(1, baseAttrs("sess-123", "anthropic", "claude-3"));
     });
 
     it("updates status", () => {
@@ -74,7 +88,7 @@ describe("TelemetryCollector", () => {
       collector.recordTurnStart();
 
       const counter = counters.get("pi.turn.count");
-      expect(counter?.add).toHaveBeenCalledWith(1, { "session.id": "sess-123" });
+      expect(counter?.add).toHaveBeenCalledWith(1, baseAttrs("sess-123"));
     });
 
     it("updates status", () => {
@@ -91,7 +105,7 @@ describe("TelemetryCollector", () => {
 
       const counter = counters.get("pi.tool_call.count");
       expect(counter?.add).toHaveBeenCalledWith(1, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Bash",
       });
     });
@@ -104,7 +118,7 @@ describe("TelemetryCollector", () => {
 
       const counter = counters.get("pi.tool_result.count");
       expect(counter?.add).toHaveBeenCalledWith(1, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Read",
         success: "true",
       });
@@ -116,7 +130,7 @@ describe("TelemetryCollector", () => {
 
       const counter = counters.get("pi.tool_result.count");
       expect(counter?.add).toHaveBeenCalledWith(1, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Bash",
         success: "false",
       });
@@ -130,7 +144,7 @@ describe("TelemetryCollector", () => {
 
       const counter = counters.get("pi.prompt.count");
       expect(counter?.add).toHaveBeenCalledWith(1, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "prompt.length": 42,
       });
     });
@@ -178,7 +192,7 @@ describe("TelemetryCollector", () => {
       collector.recordTurnStart();
 
       const counter = counters.get("pi.turn.count");
-      expect(counter?.add).toHaveBeenCalledWith(1, { "session.id": "" });
+      expect(counter?.add).toHaveBeenCalledWith(1, baseAttrs(""));
     });
   });
 
@@ -203,10 +217,10 @@ describe("TelemetryCollector", () => {
       collector.recordUsage(sampleUsage);
 
       const counter = counters.get("pi.token.usage");
-      expect(counter?.add).toHaveBeenCalledWith(100, { "session.id": "sess-123", type: "input" });
-      expect(counter?.add).toHaveBeenCalledWith(50, { "session.id": "sess-123", type: "output" });
-      expect(counter?.add).toHaveBeenCalledWith(25, { "session.id": "sess-123", type: "cache_read" });
-      expect(counter?.add).toHaveBeenCalledWith(10, { "session.id": "sess-123", type: "cache_write" });
+      expect(counter?.add).toHaveBeenCalledWith(100, { ...baseAttrs("sess-123"), type: "input" });
+      expect(counter?.add).toHaveBeenCalledWith(50, { ...baseAttrs("sess-123"), type: "output" });
+      expect(counter?.add).toHaveBeenCalledWith(25, { ...baseAttrs("sess-123"), type: "cache_read" });
+      expect(counter?.add).toHaveBeenCalledWith(10, { ...baseAttrs("sess-123"), type: "cache_write" });
     });
 
     it("records cost by type", () => {
@@ -214,10 +228,10 @@ describe("TelemetryCollector", () => {
       collector.recordUsage(sampleUsage);
 
       const counter = counters.get("pi.cost.usage");
-      expect(counter?.add).toHaveBeenCalledWith(0.001, { "session.id": "sess-123", type: "input" });
-      expect(counter?.add).toHaveBeenCalledWith(0.002, { "session.id": "sess-123", type: "output" });
-      expect(counter?.add).toHaveBeenCalledWith(0.0005, { "session.id": "sess-123", type: "cache_read" });
-      expect(counter?.add).toHaveBeenCalledWith(0.0003, { "session.id": "sess-123", type: "cache_write" });
+      expect(counter?.add).toHaveBeenCalledWith(0.001, { ...baseAttrs("sess-123"), type: "input" });
+      expect(counter?.add).toHaveBeenCalledWith(0.002, { ...baseAttrs("sess-123"), type: "output" });
+      expect(counter?.add).toHaveBeenCalledWith(0.0005, { ...baseAttrs("sess-123"), type: "cache_read" });
+      expect(counter?.add).toHaveBeenCalledWith(0.0003, { ...baseAttrs("sess-123"), type: "cache_write" });
     });
 
     it("accumulates token totals in status", () => {
@@ -278,7 +292,7 @@ describe("TelemetryCollector", () => {
       collector.recordSessionEnd();
 
       const histogram = histograms.get("pi.session.duration");
-      expect(histogram?.record).toHaveBeenCalledWith(5, { "session.id": "sess-123" });
+      expect(histogram?.record).toHaveBeenCalledWith(5, baseAttrs("sess-123"));
     });
 
     it("records turn duration histogram on turn end", () => {
@@ -291,7 +305,7 @@ describe("TelemetryCollector", () => {
       collector.recordTurnEnd();
 
       const histogram = histograms.get("pi.turn.duration");
-      expect(histogram?.record).toHaveBeenCalledWith(2.5, { "session.id": "sess-123" });
+      expect(histogram?.record).toHaveBeenCalledWith(2.5, baseAttrs("sess-123"));
     });
 
     it("records tool duration histogram on tool result", () => {
@@ -305,7 +319,7 @@ describe("TelemetryCollector", () => {
 
       const histogram = histograms.get("pi.tool.duration");
       expect(histogram?.record).toHaveBeenCalledWith(0.2, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Bash",
         success: "true",
       });
@@ -381,13 +395,13 @@ describe("TelemetryCollector", () => {
       const histogram = histograms.get("pi.tool.duration");
       // Glob: 1150 - 1050 = 100ms = 0.1s
       expect(histogram?.record).toHaveBeenCalledWith(0.1, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Glob",
         success: "true",
       });
       // Read: 1200 - 1000 = 200ms = 0.2s
       expect(histogram?.record).toHaveBeenCalledWith(0.2, {
-        "session.id": "sess-123",
+        ...baseAttrs("sess-123"),
         "tool.name": "Read",
         success: "true",
       });

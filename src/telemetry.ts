@@ -16,7 +16,7 @@ export interface UsageData {
 }
 
 export interface TelemetryCollector {
-  recordSessionStart(attrs: { sessionId: string }): void;
+  recordSessionStart(attrs: { sessionId: string; provider?: string; model?: string }): void;
   recordSessionEnd(): void;
   recordTurnStart(): void;
   recordTurnEnd(): void;
@@ -27,6 +27,8 @@ export interface TelemetryCollector {
   }): void;
   recordUserPrompt(attrs: { promptLength: number }): void;
   recordUsage(usage: UsageData): void;
+  /** Update provider/model (e.g., when user switches models mid-session) */
+  setProviderModel(provider: string, model: string): void;
   getStatus(): TelemetryStatus;
   /** For testing: allows injecting a custom time source */
   _setTimeSource?(fn: () => number): void;
@@ -154,6 +156,8 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
   };
 
   let currentSessionId = "";
+  let currentProvider = "unknown";
+  let currentModel = "unknown";
 
   // Timing state
   let sessionStartTime: number | null = null;
@@ -163,11 +167,20 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
   // Time source (injectable for testing)
   let now = () => Date.now();
 
+  // Helper to get common attributes including provider/model
+  const getBaseAttrs = () => ({
+    "session.id": currentSessionId,
+    "provider": currentProvider,
+    "model": currentModel,
+  });
+
   return {
     recordSessionStart(attrs) {
       currentSessionId = attrs.sessionId;
+      currentProvider = attrs.provider ?? "unknown";
+      currentModel = attrs.model ?? "unknown";
       sessionStartTime = now();
-      counters.sessionCounter.add(1, { "session.id": currentSessionId });
+      counters.sessionCounter.add(1, getBaseAttrs());
       status.sessions++;
     },
 
@@ -175,7 +188,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
       if (sessionStartTime !== null) {
         const durationMs = now() - sessionStartTime;
         const durationS = durationMs / 1000;
-        histograms.sessionDuration.record(durationS, { "session.id": currentSessionId });
+        histograms.sessionDuration.record(durationS, getBaseAttrs());
         status.durations.session.count++;
         status.durations.session.totalMs += durationMs;
         status.durations.session.lastMs = durationMs;
@@ -186,7 +199,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
 
     recordTurnStart() {
       turnStartTime = now();
-      counters.turnCounter.add(1, { "session.id": currentSessionId });
+      counters.turnCounter.add(1, getBaseAttrs());
       status.turns++;
     },
 
@@ -194,7 +207,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
       if (turnStartTime !== null) {
         const durationMs = now() - turnStartTime;
         const durationS = durationMs / 1000;
-        histograms.turnDuration.record(durationS, { "session.id": currentSessionId });
+        histograms.turnDuration.record(durationS, getBaseAttrs());
         status.durations.turn.count++;
         status.durations.turn.totalMs += durationMs;
         status.durations.turn.lastMs = durationMs;
@@ -205,7 +218,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
     recordToolCall(attrs) {
       toolStartTimes.set(attrs.toolName, now());
       counters.toolCallCounter.add(1, {
-        "session.id": currentSessionId,
+        ...getBaseAttrs(),
         "tool.name": attrs.toolName,
       });
       status.tools++;
@@ -217,7 +230,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
         const durationMs = now() - startTime;
         const durationS = durationMs / 1000;
         histograms.toolDuration.record(durationS, {
-          "session.id": currentSessionId,
+          ...getBaseAttrs(),
           "tool.name": attrs.toolName,
           success: String(attrs.success),
         });
@@ -227,7 +240,7 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
         toolStartTimes.delete(attrs.toolName);
       }
       counters.toolResultCounter.add(1, {
-        "session.id": currentSessionId,
+        ...getBaseAttrs(),
         "tool.name": attrs.toolName,
         success: String(attrs.success),
       });
@@ -235,24 +248,29 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
 
     recordUserPrompt(attrs) {
       counters.promptCounter.add(1, {
-        "session.id": currentSessionId,
+        ...getBaseAttrs(),
         "prompt.length": attrs.promptLength,
       });
       status.prompts++;
     },
 
+    setProviderModel(provider: string, model: string) {
+      currentProvider = provider;
+      currentModel = model;
+    },
+
     recordUsage(usage) {
-      const sessionAttrs = { "session.id": currentSessionId };
+      const baseAttrs = getBaseAttrs();
 
-      counters.tokenCounter.add(usage.input, { ...sessionAttrs, type: "input" });
-      counters.tokenCounter.add(usage.output, { ...sessionAttrs, type: "output" });
-      counters.tokenCounter.add(usage.cacheRead, { ...sessionAttrs, type: "cache_read" });
-      counters.tokenCounter.add(usage.cacheWrite, { ...sessionAttrs, type: "cache_write" });
+      counters.tokenCounter.add(usage.input, { ...baseAttrs, type: "input" });
+      counters.tokenCounter.add(usage.output, { ...baseAttrs, type: "output" });
+      counters.tokenCounter.add(usage.cacheRead, { ...baseAttrs, type: "cache_read" });
+      counters.tokenCounter.add(usage.cacheWrite, { ...baseAttrs, type: "cache_write" });
 
-      counters.costCounter.add(usage.cost.input, { ...sessionAttrs, type: "input" });
-      counters.costCounter.add(usage.cost.output, { ...sessionAttrs, type: "output" });
-      counters.costCounter.add(usage.cost.cacheRead, { ...sessionAttrs, type: "cache_read" });
-      counters.costCounter.add(usage.cost.cacheWrite, { ...sessionAttrs, type: "cache_write" });
+      counters.costCounter.add(usage.cost.input, { ...baseAttrs, type: "input" });
+      counters.costCounter.add(usage.cost.output, { ...baseAttrs, type: "output" });
+      counters.costCounter.add(usage.cost.cacheRead, { ...baseAttrs, type: "cache_read" });
+      counters.costCounter.add(usage.cost.cacheWrite, { ...baseAttrs, type: "cache_write" });
 
       status.tokens.input += usage.input;
       status.tokens.output += usage.output;
