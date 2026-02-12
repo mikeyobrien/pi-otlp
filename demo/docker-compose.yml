@@ -1,0 +1,47 @@
+services:
+  # OpenTelemetry Collector - receives OTLP metrics and exports to Prometheus
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: pi-otlp-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    network_mode: host
+
+  # Prometheus - scrapes metrics from OTLP collector
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: pi-otlp-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
+    volumes:
+      - ./prometheus-host.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    network_mode: host
+    depends_on:
+      - otel-collector
+
+  # Grafana - visualization
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: pi-otlp-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning-host:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    network_mode: host
+    depends_on:
+      - prometheus
+
+volumes:
+  prometheus-data:
+  grafana-data:
