@@ -1,0 +1,25 @@
+# Development files
+.git/
+.ralph/
+test/
+*.test.ts
+*.spec.ts
+vitest.config.ts
+
+# Documentation (project-specific)
+PRODUCT.md
+MARKET.md
+INSIGHTS.md
+PROMPT.md
+ralph.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+*.log
+coverage/
+.nyc_output/

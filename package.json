@@ -1,22 +1,25 @@
 {
-  "name": "@mobrienv/pi-otlp",
+  "name": "@mikeyobrien/pi-otlp",
   "version": "0.1.0",
   "description": "OpenTelemetry metrics and events extension for pi-coding-agent",
   "license": "MIT",
-  "author": "mobrienv",
+  "author": "mikeyobrien",
   "keywords": [
     "pi-package",
     "opentelemetry",
     "otlp",
     "metrics",
-    "observability"
+    "observability",
+    "telemetry",
+    "claude-code",
+    "ai-agent"
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mobrienv/pi-otlp.git"
+    "url": "git+https://github.com/mikeyobrien/pi-otlp.git"
   },
-  "bugs": "https://github.com/mobrienv/pi-otlp/issues",
-  "homepage": "https://github.com/mobrienv/pi-otlp",
+  "bugs": "https://github.com/mikeyobrien/pi-otlp/issues",
+  "homepage": "https://github.com/mikeyobrien/pi-otlp",
   "type": "module",
   "pi": {
     "extensions": [
