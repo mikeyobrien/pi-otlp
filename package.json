@@ -1,6 +1,6 @@
 {
   "name": "@mobrienv/pi-otlp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenTelemetry metrics and events extension for pi-coding-agent",
   "license": "MIT",
   "author": "mikeyobrien",
