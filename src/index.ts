@@ -138,9 +138,20 @@ export default function (pi: ExtensionAPI) {
         prompts: 0,
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        durations: {
+          session: { count: 0, totalMs: 0, lastMs: 0 },
+          turn: { count: 0, totalMs: 0, lastMs: 0 },
+          tool: { count: 0, totalMs: 0, lastMs: 0 },
+        },
       };
       const status = collector?.getStatus() ?? defaultStatus;
       const formatCost = (c: number) => `$${c.toFixed(4)}`;
+      const formatDuration = (ms: number) => {
+        if (ms < 1000) return `${ms}ms`;
+        return `${(ms / 1000).toFixed(1)}s`;
+      };
+      const avgMs = (stats: { count: number; totalMs: number }) =>
+        stats.count > 0 ? Math.round(stats.totalMs / stats.count) : 0;
       await ctx.ui.notify(
         `OTLP Telemetry Status:\n` +
           `  Sessions: ${status.sessions}\n` +
@@ -149,6 +160,10 @@ export default function (pi: ExtensionAPI) {
           `  Prompts: ${status.prompts}\n` +
           `  Tokens: ${status.tokens.total} (in: ${status.tokens.input}, out: ${status.tokens.output}, cache: ${status.tokens.cacheRead}/${status.tokens.cacheWrite})\n` +
           `  Cost: ${formatCost(status.cost.total)} (in: ${formatCost(status.cost.input)}, out: ${formatCost(status.cost.output)})\n` +
+          `  Durations:\n` +
+          `    Session: ${formatDuration(status.durations.session.lastMs)} last, ${formatDuration(avgMs(status.durations.session))} avg\n` +
+          `    Turn: ${formatDuration(status.durations.turn.lastMs)} last, ${formatDuration(avgMs(status.durations.turn))} avg\n` +
+          `    Tool: ${formatDuration(status.durations.tool.lastMs)} last, ${formatDuration(avgMs(status.durations.tool))} avg\n` +
           `  Exporters: ${config.exporters.join(", ")}\n` +
           `  Endpoint: ${config.otlpEndpoint}`
       );

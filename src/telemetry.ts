@@ -1,4 +1,4 @@
-import type { Meter, Counter } from "@opentelemetry/api";
+import type { Meter, Counter, Histogram } from "@opentelemetry/api";
 
 export interface UsageData {
   input: number;
@@ -28,6 +28,14 @@ export interface TelemetryCollector {
   recordUserPrompt(attrs: { promptLength: number }): void;
   recordUsage(usage: UsageData): void;
   getStatus(): TelemetryStatus;
+  /** For testing: allows injecting a custom time source */
+  _setTimeSource?(fn: () => number): void;
+}
+
+export interface DurationStats {
+  count: number;
+  totalMs: number;
+  lastMs: number;
 }
 
 export interface TelemetryStatus {
@@ -49,6 +57,11 @@ export interface TelemetryStatus {
     cacheWrite: number;
     total: number;
   };
+  durations: {
+    session: DurationStats;
+    turn: DurationStats;
+    tool: DurationStats;
+  };
 }
 
 interface Counters {
@@ -59,6 +72,12 @@ interface Counters {
   promptCounter: Counter;
   tokenCounter: Counter;
   costCounter: Counter;
+}
+
+interface Histograms {
+  sessionDuration: Histogram;
+  turnDuration: Histogram;
+  toolDuration: Histogram;
 }
 
 export function createTelemetryCollector(meter: Meter): TelemetryCollector {
@@ -93,6 +112,21 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
     }),
   };
 
+  const histograms: Histograms = {
+    sessionDuration: meter.createHistogram("pi.session.duration", {
+      description: "Session duration in seconds",
+      unit: "s",
+    }),
+    turnDuration: meter.createHistogram("pi.turn.duration", {
+      description: "Turn duration in seconds",
+      unit: "s",
+    }),
+    toolDuration: meter.createHistogram("pi.tool.duration", {
+      description: "Tool execution duration in seconds",
+      unit: "s",
+    }),
+  };
+
   const status: TelemetryStatus = {
     sessions: 0,
     turns: 0,
@@ -112,31 +146,64 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
       cacheWrite: 0,
       total: 0,
     },
+    durations: {
+      session: { count: 0, totalMs: 0, lastMs: 0 },
+      turn: { count: 0, totalMs: 0, lastMs: 0 },
+      tool: { count: 0, totalMs: 0, lastMs: 0 },
+    },
   };
 
   let currentSessionId = "";
 
+  // Timing state
+  let sessionStartTime: number | null = null;
+  let turnStartTime: number | null = null;
+  const toolStartTimes = new Map<string, number>();
+
+  // Time source (injectable for testing)
+  let now = () => Date.now();
+
   return {
     recordSessionStart(attrs) {
       currentSessionId = attrs.sessionId;
+      sessionStartTime = now();
       counters.sessionCounter.add(1, { "session.id": currentSessionId });
       status.sessions++;
     },
 
     recordSessionEnd() {
+      if (sessionStartTime !== null) {
+        const durationMs = now() - sessionStartTime;
+        const durationS = durationMs / 1000;
+        histograms.sessionDuration.record(durationS, { "session.id": currentSessionId });
+        status.durations.session.count++;
+        status.durations.session.totalMs += durationMs;
+        status.durations.session.lastMs = durationMs;
+        sessionStartTime = null;
+      }
       currentSessionId = "";
     },
 
     recordTurnStart() {
+      turnStartTime = now();
       counters.turnCounter.add(1, { "session.id": currentSessionId });
       status.turns++;
     },
 
     recordTurnEnd() {
-      // Turn end tracked via turnCounter on start
+      if (turnStartTime !== null) {
+        const durationMs = now() - turnStartTime;
+        const durationS = durationMs / 1000;
+        histograms.turnDuration.record(durationS, { "session.id": currentSessionId });
+        status.durations.turn.count++;
+        status.durations.turn.totalMs += durationMs;
+        status.durations.turn.lastMs = durationMs;
+        turnStartTime = null;
+      }
     },
 
     recordToolCall(attrs) {
+      toolStartTimes.set(attrs.toolName, now());
       counters.toolCallCounter.add(1, {
         "session.id": currentSessionId,
         "tool.name": attrs.toolName,
@@ -145,6 +212,20 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
     },
 
     recordToolResult(attrs) {
+      const startTime = toolStartTimes.get(attrs.toolName);
+      if (startTime !== undefined) {
+        const durationMs = now() - startTime;
+        const durationS = durationMs / 1000;
+        histograms.toolDuration.record(durationS, {
+          "session.id": currentSessionId,
+          "tool.name": attrs.toolName,
+          success: String(attrs.success),
+        });
+        status.durations.tool.count++;
+        status.durations.tool.totalMs += durationMs;
+        status.durations.tool.lastMs = durationMs;
+        toolStartTimes.delete(attrs.toolName);
+      }
       counters.toolResultCounter.add(1, {
         "session.id": currentSessionId,
         "tool.name": attrs.toolName,
@@ -191,7 +272,16 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
         ...status,
         tokens: { ...status.tokens },
         cost: { ...status.cost },
+        durations: {
+          session: { ...status.durations.session },
+          turn: { ...status.durations.turn },
+          tool: { ...status.durations.tool },
+        },
       };
+    },
+
+    _setTimeSource(fn: () => number) {
+      now = fn;
     },
   };
 }

@@ -22,6 +22,7 @@ vi.mock("@opentelemetry/sdk-metrics", () => {
       getMeter() {
         return {
           createCounter: () => ({ add: vi.fn() }),
+          createHistogram: () => ({ record: vi.fn() }),
         };
       }
       shutdown() {

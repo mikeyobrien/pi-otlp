@@ -6,8 +6,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createTelemetryCollector } from "../../src/telemetry.js";
 import type { Meter, Counter } from "@opentelemetry/api";
 
-function createMockMeter(): { meter: Meter; counters: Map<string, Counter> } {
+interface MockHistogram {
+  record: ReturnType<typeof vi.fn>;
+}
+
+function createMockMeter(): { meter: Meter; counters: Map<string, Counter>; histograms: Map<string, MockHistogram> } {
   const counters = new Map<string, Counter>();
+  const histograms = new Map<string, MockHistogram>();
 
   const mockCounter = (name: string): Counter => {
     const counter = {
@@ -17,26 +22,36 @@ function createMockMeter(): { meter: Meter; counters: Map<string, Counter> } {
     return counter;
   };
 
+  const mockHistogram = (name: string): MockHistogram => {
+    const histogram = {
+      record: vi.fn(),
+    };
+    histograms.set(name, histogram);
+    return histogram;
+  };
+
   const meter = {
     createCounter: vi.fn((name: string) => mockCounter(name)),
-    createHistogram: vi.fn(),
+    createHistogram: vi.fn((name: string) => mockHistogram(name)),
     createUpDownCounter: vi.fn(),
     createObservableCounter: vi.fn(),
     createObservableGauge: vi.fn(),
     createObservableUpDownCounter: vi.fn(),
   } as unknown as Meter;
 
-  return { meter, counters };
+  return { meter, counters, histograms };
 }
 
 describe("TelemetryCollector", () => {
   let collector: ReturnType<typeof createTelemetryCollector>;
   let counters: Map<string, Counter>;
+  let histograms: Map<string, MockHistogram>;
 
   beforeEach(() => {
     const mock = createMockMeter();
     collector = createTelemetryCollector(mock.meter);
     counters = mock.counters;
+    histograms = mock.histograms;
   });
 
   describe("recordSessionStart", () => {
@@ -138,6 +153,11 @@ describe("TelemetryCollector", () => {
         prompts: 1,
         tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        durations: {
+          session: { count: 0, totalMs: 0, lastMs: 0 },
+          turn: { count: 0, totalMs: 0, lastMs: 0 },
+          tool: { count: 0, totalMs: 0, lastMs: 0 },
+        },
       });
     });
 
@@ -245,6 +265,171 @@ describe("TelemetryCollector", () => {
 
       expect(status1.tokens.total).toBe(18);
       expect(status2.tokens.total).toBe(36);
+    });
+  });
+
+  describe("duration tracking", () => {
+    it("records session duration histogram on session end", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      time = 6000; // 5 seconds later
+      collector.recordSessionEnd();
+
+      const histogram = histograms.get("pi.session.duration");
+      expect(histogram?.record).toHaveBeenCalledWith(5, { "session.id": "sess-123" });
+    });
+
+    it("records turn duration histogram on turn end", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      collector.recordTurnStart();
+      time = 3500; // 2.5 seconds later
+      collector.recordTurnEnd();
+
+      const histogram = histograms.get("pi.turn.duration");
+      expect(histogram?.record).toHaveBeenCalledWith(2.5, { "session.id": "sess-123" });
+    });
+
+    it("records tool duration histogram on tool result", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      collector.recordToolCall({ toolName: "Bash" });
+      time = 1200; // 200ms later
+      collector.recordToolResult({ toolName: "Bash", success: true });
+
+      const histogram = histograms.get("pi.tool.duration");
+      expect(histogram?.record).toHaveBeenCalledWith(0.2, {
+        "session.id": "sess-123",
+        "tool.name": "Bash",
+        success: "true",
+      });
+    });
+
+    it("accumulates session duration stats", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordSessionStart({ sessionId: "s1" });
+      time = 4000;
+      collector.recordSessionEnd();
+
+      collector.recordSessionStart({ sessionId: "s2" });
+      time = 10000;
+      collector.recordSessionEnd();
+
+      const status = collector.getStatus();
+      expect(status.durations.session.count).toBe(2);
+      expect(status.durations.session.totalMs).toBe(9000); // 3000 + 6000
+      expect(status.durations.session.lastMs).toBe(6000);
+    });
+
+    it("accumulates turn duration stats", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordTurnStart();
+      time = 2000;
+      collector.recordTurnEnd();
+
+      collector.recordTurnStart();
+      time = 5000;
+      collector.recordTurnEnd();
+
+      const status = collector.getStatus();
+      expect(status.durations.turn.count).toBe(2);
+      expect(status.durations.turn.totalMs).toBe(4000); // 1000 + 3000
+      expect(status.durations.turn.lastMs).toBe(3000);
+    });
+
+    it("accumulates tool duration stats", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordToolCall({ toolName: "Read" });
+      time = 1100;
+      collector.recordToolResult({ toolName: "Read", success: true });
+
+      collector.recordToolCall({ toolName: "Write" });
+      time = 1400;
+      collector.recordToolResult({ toolName: "Write", success: true });
+
+      const status = collector.getStatus();
+      expect(status.durations.tool.count).toBe(2);
+      expect(status.durations.tool.totalMs).toBe(400); // 100 + 300
+      expect(status.durations.tool.lastMs).toBe(300);
+    });
+
+    it("handles concurrent tool calls", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      collector.recordToolCall({ toolName: "Read" });
+      time = 1050;
+      collector.recordToolCall({ toolName: "Glob" });
+      time = 1150;
+      collector.recordToolResult({ toolName: "Glob", success: true }); // Glob finishes first
+      time = 1200;
+      collector.recordToolResult({ toolName: "Read", success: true }); // Read finishes second
+
+      const histogram = histograms.get("pi.tool.duration");
+      // Glob: 1150 - 1050 = 100ms = 0.1s
+      expect(histogram?.record).toHaveBeenCalledWith(0.1, {
+        "session.id": "sess-123",
+        "tool.name": "Glob",
+        success: "true",
+      });
+      // Read: 1200 - 1000 = 200ms = 0.2s
+      expect(histogram?.record).toHaveBeenCalledWith(0.2, {
+        "session.id": "sess-123",
+        "tool.name": "Read",
+        success: "true",
+      });
+    });
+
+    it("does not record session duration if session was not started", () => {
+      collector.recordSessionEnd();
+
+      const histogram = histograms.get("pi.session.duration");
+      expect(histogram?.record).not.toHaveBeenCalled();
+    });
+
+    it("does not record turn duration if turn was not started", () => {
+      collector.recordTurnEnd();
+
+      const histogram = histograms.get("pi.turn.duration");
+      expect(histogram?.record).not.toHaveBeenCalled();
+    });
+
+    it("does not record tool duration if tool was not called", () => {
+      collector.recordToolResult({ toolName: "Unknown", success: true });
+
+      const histogram = histograms.get("pi.tool.duration");
+      expect(histogram?.record).not.toHaveBeenCalled();
+    });
+
+    it("returns deep copies of duration stats", () => {
+      let time = 1000;
+      collector._setTimeSource?.(() => time);
+
+      collector.recordTurnStart();
+      time = 2000;
+      collector.recordTurnEnd();
+
+      const status1 = collector.getStatus();
+      collector.recordTurnStart();
+      time = 4000;
+      collector.recordTurnEnd();
+      const status2 = collector.getStatus();
+
+      expect(status1.durations.turn.count).toBe(1);
+      expect(status2.durations.turn.count).toBe(2);
     });
   });
 });
