@@ -1,5 +1,20 @@
 import type { Meter, Counter } from "@opentelemetry/api";
 
+export interface UsageData {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+}
+
 export interface TelemetryCollector {
   recordSessionStart(attrs: { sessionId: string }): void;
   recordSessionEnd(): void;
@@ -11,6 +26,7 @@ export interface TelemetryCollector {
     success: boolean;
   }): void;
   recordUserPrompt(attrs: { promptLength: number }): void;
+  recordUsage(usage: UsageData): void;
   getStatus(): TelemetryStatus;
 }
 
@@ -19,6 +35,20 @@ export interface TelemetryStatus {
   turns: number;
   tools: number;
   prompts: number;
+  tokens: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
+  cost: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    total: number;
+  };
 }
 
 interface Counters {
@@ -27,6 +57,8 @@ interface Counters {
   toolCallCounter: Counter;
   toolResultCounter: Counter;
   promptCounter: Counter;
+  tokenCounter: Counter;
+  costCounter: Counter;
 }
 
 export function createTelemetryCollector(meter: Meter): TelemetryCollector {
@@ -51,6 +83,14 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
       description: "Count of user prompts submitted",
       unit: "1",
     }),
+    tokenCounter: meter.createCounter("pi.token.usage", {
+      description: "Token usage by type (input/output/cache)",
+      unit: "tokens",
+    }),
+    costCounter: meter.createCounter("pi.cost.usage", {
+      description: "Cost in USD by type (input/output/cache)",
+      unit: "USD",
+    }),
   };
 
   const status: TelemetryStatus = {
@@ -58,6 +98,20 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
     turns: 0,
     tools: 0,
     prompts: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
   };
 
   let currentSessionId = "";
@@ -106,8 +160,38 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
       status.prompts++;
     },
 
+    recordUsage(usage) {
+      const sessionAttrs = { "session.id": currentSessionId };
+
+      counters.tokenCounter.add(usage.input, { ...sessionAttrs, type: "input" });
+      counters.tokenCounter.add(usage.output, { ...sessionAttrs, type: "output" });
+      counters.tokenCounter.add(usage.cacheRead, { ...sessionAttrs, type: "cache_read" });
+      counters.tokenCounter.add(usage.cacheWrite, { ...sessionAttrs, type: "cache_write" });
+
+      counters.costCounter.add(usage.cost.input, { ...sessionAttrs, type: "input" });
+      counters.costCounter.add(usage.cost.output, { ...sessionAttrs, type: "output" });
+      counters.costCounter.add(usage.cost.cacheRead, { ...sessionAttrs, type: "cache_read" });
+      counters.costCounter.add(usage.cost.cacheWrite, { ...sessionAttrs, type: "cache_write" });
+
+      status.tokens.input += usage.input;
+      status.tokens.output += usage.output;
+      status.tokens.cacheRead += usage.cacheRead;
+      status.tokens.cacheWrite += usage.cacheWrite;
+      status.tokens.total += usage.totalTokens;
+
+      status.cost.input += usage.cost.input;
+      status.cost.output += usage.cost.output;
+      status.cost.cacheRead += usage.cost.cacheRead;
+      status.cost.cacheWrite += usage.cost.cacheWrite;
+      status.cost.total += usage.cost.total;
+    },
+
     getStatus() {
-      return { ...status };
+      return {
+        ...status,
+        tokens: { ...status.tokens },
+        cost: { ...status.cost },
+      };
     },
   };
 }

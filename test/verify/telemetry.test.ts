@@ -136,6 +136,8 @@ describe("TelemetryCollector", () => {
         turns: 2,
         tools: 3,
         prompts: 1,
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
       });
     });
 
@@ -157,6 +159,92 @@ describe("TelemetryCollector", () => {
 
       const counter = counters.get("pi.turn.count");
       expect(counter?.add).toHaveBeenCalledWith(1, { "session.id": "" });
+    });
+  });
+
+  describe("recordUsage", () => {
+    const sampleUsage = {
+      input: 100,
+      output: 50,
+      cacheRead: 25,
+      cacheWrite: 10,
+      totalTokens: 185,
+      cost: {
+        input: 0.001,
+        output: 0.002,
+        cacheRead: 0.0005,
+        cacheWrite: 0.0003,
+        total: 0.0038,
+      },
+    };
+
+    it("records token counts by type", () => {
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      collector.recordUsage(sampleUsage);
+
+      const counter = counters.get("pi.token.usage");
+      expect(counter?.add).toHaveBeenCalledWith(100, { "session.id": "sess-123", type: "input" });
+      expect(counter?.add).toHaveBeenCalledWith(50, { "session.id": "sess-123", type: "output" });
+      expect(counter?.add).toHaveBeenCalledWith(25, { "session.id": "sess-123", type: "cache_read" });
+      expect(counter?.add).toHaveBeenCalledWith(10, { "session.id": "sess-123", type: "cache_write" });
+    });
+
+    it("records cost by type", () => {
+      collector.recordSessionStart({ sessionId: "sess-123" });
+      collector.recordUsage(sampleUsage);
+
+      const counter = counters.get("pi.cost.usage");
+      expect(counter?.add).toHaveBeenCalledWith(0.001, { "session.id": "sess-123", type: "input" });
+      expect(counter?.add).toHaveBeenCalledWith(0.002, { "session.id": "sess-123", type: "output" });
+      expect(counter?.add).toHaveBeenCalledWith(0.0005, { "session.id": "sess-123", type: "cache_read" });
+      expect(counter?.add).toHaveBeenCalledWith(0.0003, { "session.id": "sess-123", type: "cache_write" });
+    });
+
+    it("accumulates token totals in status", () => {
+      collector.recordUsage(sampleUsage);
+      collector.recordUsage(sampleUsage);
+
+      const status = collector.getStatus();
+      expect(status.tokens).toEqual({
+        input: 200,
+        output: 100,
+        cacheRead: 50,
+        cacheWrite: 20,
+        total: 370,
+      });
+    });
+
+    it("accumulates cost totals in status", () => {
+      collector.recordUsage(sampleUsage);
+      collector.recordUsage(sampleUsage);
+
+      const status = collector.getStatus();
+      expect(status.cost.input).toBeCloseTo(0.002);
+      expect(status.cost.output).toBeCloseTo(0.004);
+      expect(status.cost.cacheRead).toBeCloseTo(0.001);
+      expect(status.cost.cacheWrite).toBeCloseTo(0.0006);
+      expect(status.cost.total).toBeCloseTo(0.0076);
+    });
+  });
+
+  describe("getStatus with tokens and cost", () => {
+    it("returns deep copies of nested objects", () => {
+      const usage = {
+        input: 10,
+        output: 5,
+        cacheRead: 2,
+        cacheWrite: 1,
+        totalTokens: 18,
+        cost: { input: 0.01, output: 0.02, cacheRead: 0.001, cacheWrite: 0.001, total: 0.032 },
+      };
+      collector.recordUsage(usage);
+
+      const status1 = collector.getStatus();
+      collector.recordUsage(usage);
+      const status2 = collector.getStatus();
+
+      expect(status1.tokens.total).toBe(18);
+      expect(status2.tokens.total).toBe(36);
     });
   });
 });

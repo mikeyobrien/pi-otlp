@@ -93,8 +93,15 @@ export default function (pi: ExtensionAPI) {
     collector?.recordTurnStart();
   });
 
-  pi.on("turn_end", async () => {
+  pi.on("turn_end", async (event) => {
     collector?.recordTurnEnd();
+
+    if (event.message && "role" in event.message && event.message.role === "assistant") {
+      const assistantMsg = event.message as { usage?: { input: number; output: number; cacheRead: number; cacheWrite: number; totalTokens: number; cost: { input: number; output: number; cacheRead: number; cacheWrite: number; total: number } } };
+      if (assistantMsg.usage) {
+        collector?.recordUsage(assistantMsg.usage);
+      }
+    }
   });
 
   // Tool events
@@ -124,13 +131,24 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("otlp-status", {
     description: "Show OTLP telemetry status",
     async handler(_args, ctx) {
-      const status = collector?.getStatus() ?? { sessions: 0, turns: 0, tools: 0, prompts: 0 };
+      const defaultStatus = {
+        sessions: 0,
+        turns: 0,
+        tools: 0,
+        prompts: 0,
+        tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      };
+      const status = collector?.getStatus() ?? defaultStatus;
+      const formatCost = (c: number) => `$${c.toFixed(4)}`;
       await ctx.ui.notify(
         `OTLP Telemetry Status:\n` +
           `  Sessions: ${status.sessions}\n` +
           `  Turns: ${status.turns}\n` +
           `  Tool calls: ${status.tools}\n` +
           `  Prompts: ${status.prompts}\n` +
+          `  Tokens: ${status.tokens.total} (in: ${status.tokens.input}, out: ${status.tokens.output}, cache: ${status.tokens.cacheRead}/${status.tokens.cacheWrite})\n` +
+          `  Cost: ${formatCost(status.cost.total)} (in: ${formatCost(status.cost.input)}, out: ${formatCost(status.cost.output)})\n` +
           `  Exporters: ${config.exporters.join(", ")}\n` +
           `  Endpoint: ${config.otlpEndpoint}`
       );
