@@ -5,7 +5,7 @@ OpenTelemetry metrics extension for [pi-coding-agent](https://github.com/badlogi
 ## Installation
 
 ```bash
-pi install npm:@mikeyobrien/pi-otlp
+pi install npm:@mobrienv/pi-otlp
 ```
 
 Or add to `~/.pi/agent/settings.json`:
@@ -45,23 +45,27 @@ export PI_OTLP_DEBUG=1
 
 ### Counters
 
-| Metric | Description | Attributes |
-|--------|-------------|------------|
-| `pi.session.count` | Sessions started | `session.id` |
-| `pi.turn.count` | Agent turns (tool-calling loops) | `session.id` |
-| `pi.tool_call.count` | Tool invocations | `session.id`, `tool.name` |
-| `pi.tool_result.count` | Tool completions | `session.id`, `tool.name`, `success` |
-| `pi.prompt.count` | User prompts | `session.id`, `prompt.length` |
-| `pi.token.usage` | Token consumption | `session.id`, `type` (input/output/cache_read/cache_write) |
-| `pi.cost.usage` | Cost in USD | `session.id`, `type` (input/output/cache_read/cache_write) |
+All counters include base attributes: `session.id`, `provider`, `model`
+
+| Metric | Description | Additional Attributes |
+|--------|-------------|----------------------|
+| `pi.session.count` | Sessions started | — |
+| `pi.turn.count` | Agent turns (tool-calling loops) | — |
+| `pi.tool_call.count` | Tool invocations | `tool.name` |
+| `pi.tool_result.count` | Tool completions | `tool.name`, `success` |
+| `pi.prompt.count` | User prompts | `prompt.length` |
+| `pi.token.usage` | Token consumption | `type` (input/output/cache_read/cache_write) |
+| `pi.cost.usage` | Cost in USD | `type` (input/output/cache_read/cache_write) |
 
 ### Histograms
 
-| Metric | Description | Unit |
-|--------|-------------|------|
-| `pi.session.duration` | Session duration | seconds |
-| `pi.turn.duration` | Turn duration | seconds |
-| `pi.tool.duration` | Tool execution duration | seconds |
+All histograms include base attributes: `session.id`, `provider`, `model`
+
+| Metric | Description | Unit | Additional Attributes |
+|--------|-------------|------|----------------------|
+| `pi.session.duration` | Session duration | seconds | — |
+| `pi.turn.duration` | Turn duration | seconds | — |
+| `pi.tool.duration` | Tool execution duration | seconds | `tool.name`, `success` |
 
 ## Commands
 
@@ -114,6 +118,10 @@ docker run -d --name otel-collector \
   -p 4318:4318 \
   otel/opentelemetry-collector-contrib:latest
 ```
+
+### Full Stack Demo
+
+See [`demo/`](./demo) for a complete Docker Compose setup with OTLP Collector, Prometheus, and pre-configured Grafana dashboards.
 
 ## License
 
