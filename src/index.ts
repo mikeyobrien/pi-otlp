@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { metrics, DiagConsoleLogger, DiagLogLevel, diag } from "@opentelemetry/api";
+import { metrics, DiagLogLevel, diag } from "@opentelemetry/api";
+import type { DiagLogger } from "@opentelemetry/api";
 import {
   MeterProvider,
   PeriodicExportingMetricReader,
@@ -11,6 +12,9 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
+import { createWriteStream } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { createTelemetryCollector, type TelemetryCollector } from "./telemetry.js";
 import { getConfig } from "./config.js";
 
@@ -22,6 +26,36 @@ let meterProvider: MeterProvider | null = null;
 let currentProvider: string = "unknown";
 let currentModel: string = "unknown";
 
+// File-based diagnostic logger to avoid clobbering TUI
+class FileDiagLogger implements DiagLogger {
+  private stream: ReturnType<typeof createWriteStream> | null = null;
+
+  constructor(logPath: string) {
+    try {
+      this.stream = createWriteStream(logPath, { flags: "a" });
+    } catch {
+      // Silently fail if we can't open the log file
+    }
+  }
+
+  private write(level: string, message: string, ...args: unknown[]) {
+    if (!this.stream) return;
+    const timestamp = new Date().toISOString();
+    const formatted = `[${timestamp}] [${level}] ${message} ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`;
+    this.stream.write(formatted);
+  }
+
+  verbose(message: string, ...args: unknown[]) { this.write('VERBOSE', message, ...args); }
+  debug(message: string, ...args: unknown[]) { this.write('DEBUG', message, ...args); }
+  info(message: string, ...args: unknown[]) { this.write('INFO', message, ...args); }
+  warn(message: string, ...args: unknown[]) { this.write('WARN', message, ...args); }
+  error(message: string, ...args: unknown[]) { this.write('ERROR', message, ...args); }
+
+  close() {
+    this.stream?.end();
+  }
+}
+
 export default function (pi: ExtensionAPI) {
   const config = getConfig();
 
@@ -30,7 +64,8 @@ export default function (pi: ExtensionAPI) {
   }
 
   if (config.debug) {
-    diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
+    const logPath = join(homedir(), ".pi", "otlp-debug.log");
+    diag.setLogger(new FileDiagLogger(logPath), DiagLogLevel.DEBUG);
   }
 
   const resource = new Resource({
