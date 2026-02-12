@@ -129,14 +129,6 @@ See [`demo/`](./demo) for a complete Docker Compose setup with OTLP Collector, P
 
 ![pi-otlp dashboard overview](./demo/screenshots/dashboard-full.png)
 
-### Tokens and cost panels
-
-![pi-otlp tokens and costs](./demo/screenshots/dashboard-tokens.png)
-
-### 15-minute activity view
-
-![pi-otlp 15 minute dashboard](./demo/screenshots/dashboard-15m.png)
-
 ## License
 
 MIT
