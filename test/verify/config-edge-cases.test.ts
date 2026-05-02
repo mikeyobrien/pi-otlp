@@ -16,40 +16,6 @@ describe("Config Edge Cases", () => {
     process.env = originalEnv;
   });
 
-  describe("header parsing edge cases", () => {
-    it("handles headers with equals signs in values (like base64)", () => {
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Basic dXNlcjpwYXNz==";
-      const config = getConfig();
-      expect(config.otlpHeaders).toEqual({
-        Authorization: "Basic dXNlcjpwYXNz==",
-      });
-    });
-
-    it("handles empty header string", () => {
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = "";
-      const config = getConfig();
-      expect(config.otlpHeaders).toEqual({});
-    });
-
-    it("handles whitespace around header keys and values", () => {
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = " X-Key = value , Y-Key = other ";
-      const config = getConfig();
-      expect(config.otlpHeaders).toEqual({
-        "X-Key": "value",
-        "Y-Key": "other",
-      });
-    });
-
-    it("skips malformed header entries (missing value)", () => {
-      process.env.OTEL_EXPORTER_OTLP_HEADERS = "Good=value,BadNoEquals,Another=ok";
-      const config = getConfig();
-      expect(config.otlpHeaders).toEqual({
-        Good: "value",
-        Another: "ok",
-      });
-    });
-  });
-
   describe("exporter parsing", () => {
     it("handles whitespace around exporter names", () => {
       process.env.OTEL_METRICS_EXPORTER = " console , otlp ";
@@ -100,15 +66,6 @@ describe("Config Edge Cases", () => {
         const config = getConfig();
         expect(config.enabled, `PI_OTLP_ENABLE=${value}`).toBe(expected);
       }
-    });
-  });
-
-  describe("endpoint fallback chain", () => {
-    it("uses default when neither endpoint env var is set", () => {
-      delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
-      delete process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT;
-      const config = getConfig();
-      expect(config.otlpEndpoint).toBe("http://localhost:4318/v1/metrics");
     });
   });
 });

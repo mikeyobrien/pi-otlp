@@ -36,28 +36,6 @@ describe("getConfig", () => {
     expect(config.exporters).toEqual(["console"]);
   });
 
-  it("uses OTEL_EXPORTER_OTLP_ENDPOINT", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://collector:4318";
-    const config = getConfig();
-    expect(config.otlpEndpoint).toBe("http://collector:4318");
-  });
-
-  it("prefers OTEL_EXPORTER_OTLP_METRICS_ENDPOINT over general endpoint", () => {
-    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "http://general:4318";
-    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT = "http://metrics:4318";
-    const config = getConfig();
-    expect(config.otlpEndpoint).toBe("http://metrics:4318");
-  });
-
-  it("parses OTEL_EXPORTER_OTLP_HEADERS", () => {
-    process.env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Bearer token,X-Api-Key=key123";
-    const config = getConfig();
-    expect(config.otlpHeaders).toEqual({
-      Authorization: "Bearer token",
-      "X-Api-Key": "key123",
-    });
-  });
-
   it("parses OTEL_METRIC_EXPORT_INTERVAL", () => {
     process.env.OTEL_METRIC_EXPORT_INTERVAL = "5000";
     const config = getConfig();

@@ -6,7 +6,7 @@ import {
   PeriodicExportingMetricReader,
   ConsoleMetricExporter,
 } from "@opentelemetry/sdk-metrics";
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
+import { createOtlpExporter, getOtelDiagnostics } from "./otlp-exporter.js";
 import { Resource } from "@opentelemetry/resources";
 import {
   ATTR_SERVICE_NAME,
@@ -87,10 +87,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   if (config.exporters.includes("otlp")) {
-    const otlpExporter = new OTLPMetricExporter({
-      url: config.otlpEndpoint,
-      headers: config.otlpHeaders,
-    });
+    const otlpExporter = createOtlpExporter();
     readers.push(
       new PeriodicExportingMetricReader({
         exporter: otlpExporter,
@@ -221,7 +218,7 @@ export default function (pi: ExtensionAPI) {
           `    Turn: ${formatDuration(status.durations.turn.lastMs)} last, ${formatDuration(avgMs(status.durations.turn))} avg\n` +
           `    Tool: ${formatDuration(status.durations.tool.lastMs)} last, ${formatDuration(avgMs(status.durations.tool))} avg\n` +
           `  Exporters: ${config.exporters.join(", ")}\n` +
-          `  Endpoint: ${config.otlpEndpoint}`
+          getOtelDiagnostics()
       );
     },
   });
