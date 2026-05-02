@@ -44,6 +44,11 @@ vi.mock("@opentelemetry/exporter-metrics-otlp-http", () => ({
   },
 }));
 
+vi.mock("../../src/otlp-exporter.js", () => ({
+  createOtlpExporter: () => ({}),
+  getOtelDiagnostics: () => "  Protocol: http/protobuf (from default)\n  Endpoint: SDK default (from SDK default)\n  Headers: none",
+}));
+
 vi.mock("@opentelemetry/resources", () => ({
   Resource: class MockResource {
     constructor() {}
@@ -117,6 +122,7 @@ describe("Extension", () => {
     expect(api.handlers.has("tool_call")).toBe(true);
     expect(api.handlers.has("tool_result")).toBe(true);
     expect(api.handlers.has("input")).toBe(true);
+    expect(api.handlers.has("model_select")).toBe(true);
   });
 
   it("registers the otlp-status command", async () => {

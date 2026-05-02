@@ -160,6 +160,15 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
+  // Model/provider switch (Ctrl+P)
+  pi.on("model_select", async (event) => {
+    const provider = event.model.provider as string;
+    const modelId = event.model.id;
+    currentProvider = provider;
+    currentModel = modelId;
+    collector?.setProviderModel(provider, modelId);
+  });
+
   // User input event
   pi.on("input", async (event, ctx) => {
     if (event.text) {
