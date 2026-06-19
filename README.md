@@ -31,7 +31,11 @@ export OTEL_METRICS_EXPORTER=console
 
 # For OTLP export (e.g., to Grafana, Datadog, or any OTLP-compatible backend)
 export OTEL_METRICS_EXPORTER=otlp
-export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/metrics
+
+# Base endpoint — /v1/metrics is appended automatically if missing
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+# Or specify the full metrics URL directly (used as-is, no path appended)
+export OTEL_EXPORTER_OTLP_METRICS_ENDPOINT=http://localhost:4318/v1/metrics
 
 # Optional: export interval (default: 60000ms)
 export OTEL_METRIC_EXPORT_INTERVAL=10000
@@ -39,11 +43,27 @@ export OTEL_METRIC_EXPORT_INTERVAL=10000
 # Optional: OTLP headers for authentication
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer token"
 
+# Optional: HTTP basic auth (e.g., Grafana Cloud). Sets the Authorization
+# header and overrides any Authorization in OTEL_EXPORTER_OTLP_HEADERS.
+export PI_OTLP_BASIC_AUTH_USER=123456
+export PI_OTLP_BASIC_AUTH_PASSWORD=glc_your_token
+
+# Optional: add a "user" attribute to all metrics
+export PI_OTLP_USER_LABEL=alice
+
 # Optional: debug logging
 export PI_OTLP_DEBUG=1
 ```
 
+### Endpoint resolution
+
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` (if set) is used verbatim as the full metrics URL.
+- Otherwise `OTEL_EXPORTER_OTLP_ENDPOINT` is treated as a base URL: a trailing slash is stripped and `/v1/metrics` is appended unless it's already present.
+- Default: `http://localhost:4318/v1/metrics`.
+
 ## Metrics
+
+> All metrics also include a `user` attribute when `PI_OTLP_USER_LABEL` is set.
 
 ### Counters
 
