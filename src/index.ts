@@ -103,6 +103,14 @@ export default function (pi: ExtensionAPI) {
     return;
   }
 
+  // Clean up any previous provider from a prior extension load (e.g. session switch)
+  if (meterProvider) {
+    meterProvider.shutdown().catch(() => {});
+    meterProvider = null;
+    collector = null;
+  }
+  metrics.disable();
+
   meterProvider = new MeterProvider({
     resource,
     readers,
@@ -111,7 +119,7 @@ export default function (pi: ExtensionAPI) {
   metrics.setGlobalMeterProvider(meterProvider);
 
   const meter = meterProvider.getMeter("com.pi.otlp");
-  collector = createTelemetryCollector(meter);
+  collector = createTelemetryCollector(meter, { user: config.user });
 
   // Session lifecycle events
   pi.on("session_start", async (_event, ctx) => {

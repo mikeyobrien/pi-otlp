@@ -82,7 +82,12 @@ interface Histograms {
   toolDuration: Histogram;
 }
 
-export function createTelemetryCollector(meter: Meter): TelemetryCollector {
+export interface TelemetryCollectorOptions {
+  /** Optional user label added to all metrics */
+  user?: string;
+}
+
+export function createTelemetryCollector(meter: Meter, options?: TelemetryCollectorOptions): TelemetryCollector {
   const counters: Counters = {
     sessionCounter: meter.createCounter("pi.session.count", {
       description: "Count of pi coding sessions started",
@@ -168,11 +173,17 @@ export function createTelemetryCollector(meter: Meter): TelemetryCollector {
   let now = () => Date.now();
 
   // Helper to get common attributes including provider/model
-  const getBaseAttrs = () => ({
-    "session.id": currentSessionId,
-    "provider": currentProvider,
-    "model": currentModel,
-  });
+  const getBaseAttrs = () => {
+    const attrs: Record<string, string> = {
+      "session.id": currentSessionId,
+      "provider": currentProvider,
+      "model": currentModel,
+    };
+    if (options?.user) {
+      attrs["user"] = options.user;
+    }
+    return attrs;
+  };
 
   return {
     recordSessionStart(attrs) {
