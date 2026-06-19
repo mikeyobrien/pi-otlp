@@ -446,4 +446,52 @@ describe("TelemetryCollector", () => {
       expect(status2.durations.turn.count).toBe(2);
     });
   });
+
+  describe("user label", () => {
+    it("includes user attribute when configured", () => {
+      const mock = createMockMeter();
+      const userCollector = createTelemetryCollector(mock.meter, { user: "alice" });
+
+      userCollector.recordSessionStart({ sessionId: "sess-1", provider: "anthropic", model: "claude-3" });
+
+      const counter = mock.counters.get("pi.session.count");
+      expect(counter?.add).toHaveBeenCalledWith(1, {
+        "session.id": "sess-1",
+        provider: "anthropic",
+        model: "claude-3",
+        user: "alice",
+      });
+    });
+
+    it("does not include user attribute when not configured", () => {
+      const mock = createMockMeter();
+      const noUserCollector = createTelemetryCollector(mock.meter);
+
+      noUserCollector.recordSessionStart({ sessionId: "sess-1" });
+
+      const counter = mock.counters.get("pi.session.count");
+      expect(counter?.add).toHaveBeenCalledWith(1, {
+        "session.id": "sess-1",
+        provider: "unknown",
+        model: "unknown",
+      });
+    });
+
+    it("includes user in tool call attributes", () => {
+      const mock = createMockMeter();
+      const userCollector = createTelemetryCollector(mock.meter, { user: "bob" });
+
+      userCollector.recordSessionStart({ sessionId: "sess-1" });
+      userCollector.recordToolCall({ toolName: "Bash" });
+
+      const counter = mock.counters.get("pi.tool_call.count");
+      expect(counter?.add).toHaveBeenCalledWith(1, {
+        "session.id": "sess-1",
+        provider: "unknown",
+        model: "unknown",
+        user: "bob",
+        "tool.name": "Bash",
+      });
+    });
+  });
 });

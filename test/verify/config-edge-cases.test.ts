@@ -10,6 +10,9 @@ describe("Config Edge Cases", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    // Clear basic auth vars so they don't inject an Authorization header
+    delete process.env.PI_OTLP_BASIC_AUTH_USER;
+    delete process.env.PI_OTLP_BASIC_AUTH_PASSWORD;
   });
 
   afterEach(() => {
